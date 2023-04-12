@@ -59,6 +59,13 @@ enum advertising_type {
     ZMK_ADV_CONN,
 } advertising_status;
 
+#define ADV_STR(___n_) (\
+  ___n_ == ZMK_ADV_NONE ? "none"    \
+: ___n_ == ZMK_ADV_DIR  ? "dir"     \
+: ___n_ == ZMK_ADV_CONN ? "conn"    \
+:                         "unknown" \
+)
+
 #define CURR_ADV(adv) (adv << 4)
 
 #define ZMK_ADV_CONN_NAME                                                                          \
@@ -180,6 +187,7 @@ int update_advertising() {
         // LOG_DBG("Directed advertising to %s", addr_str);
         // desired_adv = ZMK_ADV_DIR;
     }
+    LOG_DBG("<NEKOE> from %s to %s", ADV_STR(advertising_status), ADV_STR(desired_adv));
     LOG_DBG("advertising from %d to %d", advertising_status, desired_adv);
 
     switch (desired_adv + CURR_ADV(advertising_status)) {
@@ -361,18 +369,22 @@ static bool is_conn_active_profile(const struct bt_conn *conn) {
 }
 
 static void connected(struct bt_conn *conn, uint8_t err) {
-    char addr[BT_ADDR_LE_STR_LEN];
+    char addr_src[BT_ADDR_LE_STR_LEN];
+    char addr_dst[BT_ADDR_LE_STR_LEN];
+    char *addr = addr_dst;
     struct bt_conn_info info;
     LOG_DBG("Connected thread: %p", k_current_get());
 
     bt_conn_get_info(conn, &info);
+    bt_addr_le_to_str(info.le.src, addr_src, sizeof(addr_src));
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr_dst, sizeof(addr_dst));
+    LOG_DBG("<NEKOE> role: %s src: %s dst: %s timeout: %d err: %d", BT_ROLE_STR(info.role), addr_src, addr_dst, info.le.timeout, err);
 
     if (info.role != BT_CONN_ROLE_PERIPHERAL) {
         LOG_DBG("SKIPPING FOR ROLE %d", info.role);
         return;
     }
 
-    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
     advertising_status = ZMK_ADV_NONE;
 
     if (err) {
@@ -396,12 +408,14 @@ static void connected(struct bt_conn *conn, uint8_t err) {
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason) {
-    char addr[BT_ADDR_LE_STR_LEN];
+    char addr_src[BT_ADDR_LE_STR_LEN];
+    char addr_dst[BT_ADDR_LE_STR_LEN];
     struct bt_conn_info info;
 
-    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-    LOG_DBG("Disconnected from %s (reason 0x%02x)", addr, reason);
+    bt_addr_le_to_str(info.le.src, addr_src, sizeof(addr_src));
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr_dst, sizeof(addr_dst));
+    bt_conn_get_info(conn, &info);
+    LOG_DBG("<NEKOE> role: %s src: %s dst: %s timeout: %d reason: %d", BT_ROLE_STR(info.role), addr_src, addr_dst, info.le.timeout, reason);
 
     bt_conn_get_info(conn, &info);
 
@@ -421,9 +435,15 @@ static void disconnected(struct bt_conn *conn, uint8_t reason) {
 }
 
 static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err) {
-    char addr[BT_ADDR_LE_STR_LEN];
+    char addr_src[BT_ADDR_LE_STR_LEN];
+    char addr_dst[BT_ADDR_LE_STR_LEN];
+    char *addr = addr_dst;
+    struct bt_conn_info info;
 
-    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+    bt_addr_le_to_str(info.le.src, addr_src, sizeof(addr_src));
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr_dst, sizeof(addr_dst));
+    bt_conn_get_info(conn, &info);
+    LOG_DBG("<NEKOE> role: %s src: %s dst: %s timeout: %d level: %d err: %s", BT_ROLE_STR(info.role), addr_src, addr_dst, info.le.timeout, level, BT_SECURITY_ERR_STR(err));
 
     if (!err) {
         LOG_DBG("Security changed: %s level %u", addr, level);
